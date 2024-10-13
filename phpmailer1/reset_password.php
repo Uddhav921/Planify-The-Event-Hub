@@ -10,13 +10,26 @@ if (!$conn) {
 $error_message = '';
 $success_message = '';
 $show_form = false;
+$debug_output = '';  // Initialize debug output variable
+
+// Debug: Current server time
+$debug_output .= "Debug: Current server time: " . date('Y-m-d H:i:s') . "<br>";
 
 if ($_SERVER["REQUEST_METHOD"] == "GET" && isset($_GET['token'])) {
     $token = $_GET['token'];
     
+    // Debug: Print the token
+    $debug_output .= "Debug: Token received: " . htmlspecialchars($token) . "<br>";
+    
     // Verify the token
-    $sql = "SELECT * FROM users3 WHERE reset_token = $1 AND reset_token_expiry > NOW()";
+    $sql = "SELECT * FROM users3 WHERE reset_token = $1 AND reset_token_expiry > '2000-01-01'";
     $result = pg_query_params($conn, $sql, array($token));
+
+    // Debug: Print the SQL query and result
+    $debug_output .= "Debug: SQL Query: " . $sql . "<br>";
+    $debug_output .= "Debug: Token used in query: " . $token . "<br>";
+    $debug_output .= "Debug: Query result: " . ($result ? "Success" : "Failure") . "<br>";
+    $debug_output .= "Debug: Number of rows: " . pg_num_rows($result) . "<br>";
 
     if ($result && pg_num_rows($result) > 0) {
         // Token is valid, show the reset password form
@@ -32,15 +45,21 @@ if ($_SERVER["REQUEST_METHOD"] == "GET" && isset($_GET['token'])) {
     if ($new_password === $confirm_password) {
         $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
         
+        // Update the SQL query to set password_changed_at to the current timestamp
         $sql = "UPDATE users3 SET password = $1, reset_token = NULL, reset_token_expiry = NULL, password_changed_at = NOW() WHERE reset_token = $2 RETURNING *";
         $result = pg_query_params($conn, $sql, array($hashed_password, $token));
 
         if ($result && pg_num_rows($result) > 0) {
             $success_message = "Your password has been successfully reset. You can now log in with your new password.";
             $show_form = false;
+            
+            // Debug: Print the updated row
+            $updated_row = pg_fetch_assoc($result);
+            $debug_output .= "Debug: Password changed at: " . $updated_row['password_changed_at'] . "<br>";
         } else {
             $error_message = "Failed to reset password. Please try again.";
             $show_form = true;
+            $debug_output .= "Debug: SQL Error: " . pg_last_error($conn) . "<br>";
         }
     } else {
         $error_message = "Passwords do not match. Please try again.";
@@ -64,6 +83,7 @@ pg_close($conn);
         .reset-btn { background-color: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; }
         .error-message { color: red; margin-bottom: 10px; }
         .success-message { color: green; margin-bottom: 10px; }
+        .debug-output { background-color: #f0f0f0; padding: 10px; margin-top: 20px; border-radius: 4px; }
     </style>
 </head>
 <body>
@@ -85,6 +105,12 @@ pg_close($conn);
         <?php endif; ?>
         <?php if ($success_message): ?>
             <p><a href="index.php">Return to Login</a></p>
+        <?php endif; ?>
+
+        <?php if (!empty($debug_output)): ?>
+            <div class="debug-output">
+                <?php echo $debug_output; ?>
+            </div>
         <?php endif; ?>
     </div>
 </body>
